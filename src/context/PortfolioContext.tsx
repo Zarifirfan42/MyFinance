@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { uid } from '@/lib/ids';
 import {
   loadNetWorthHistory,
   snapNetWorthFromPortfolio,
@@ -24,6 +25,10 @@ interface PortfolioCtx extends PortfolioState {
     id: string,
     patch: Partial<Pick<Investment, 'current' | 'cost' | 'name' | 'risk'>>,
   ) => void;
+  addBank: (bank: Omit<BankAccount, 'id'>) => void;
+  deleteBank: (id: string) => void;
+  addInvestment: (inv: Omit<Investment, 'id'>) => void;
+  deleteInvestment: (id: string) => void;
 }
 
 const Ctx = createContext<PortfolioCtx | null>(null);
@@ -33,6 +38,13 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const [netWorthHistory, setNetWorthHistory] = useState<NetWorthPoint[]>(() =>
     loadNetWorthHistory(),
   );
+
+  /** Record net worth snapshot when the app loads (new calendar day gets a point when user opens the app). */
+  useEffect(() => {
+    const s = loadPortfolio();
+    snapNetWorthFromPortfolio(s.banks, s.investments);
+    setNetWorthHistory(loadNetWorthHistory());
+  }, []);
 
   useEffect(() => {
     snapNetWorthFromPortfolio(state.banks, state.investments);
@@ -83,6 +95,46 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  const addBank = useCallback(
+    (bank: Omit<BankAccount, 'id'>) => {
+      persist((prev) => ({
+        ...prev,
+        banks: [...prev.banks, { ...bank, id: uid() }],
+      }));
+    },
+    [persist],
+  );
+
+  const deleteBank = useCallback(
+    (id: string) => {
+      persist((prev) => ({
+        ...prev,
+        banks: prev.banks.filter((b) => b.id !== id),
+      }));
+    },
+    [persist],
+  );
+
+  const addInvestment = useCallback(
+    (inv: Omit<Investment, 'id'>) => {
+      persist((prev) => ({
+        ...prev,
+        investments: [...prev.investments, { ...inv, id: uid() }],
+      }));
+    },
+    [persist],
+  );
+
+  const deleteInvestment = useCallback(
+    (id: string) => {
+      persist((prev) => ({
+        ...prev,
+        investments: prev.investments.filter((i) => i.id !== id),
+      }));
+    },
+    [persist],
+  );
+
   const value = useMemo(
     () => ({
       ...state,
@@ -91,8 +143,23 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       setInvestments,
       updateBank,
       updateInvestment,
+      addBank,
+      deleteBank,
+      addInvestment,
+      deleteInvestment,
     }),
-    [state, netWorthHistory, setBanks, setInvestments, updateBank, updateInvestment],
+    [
+      state,
+      netWorthHistory,
+      setBanks,
+      setInvestments,
+      updateBank,
+      updateInvestment,
+      addBank,
+      deleteBank,
+      addInvestment,
+      deleteInvestment,
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

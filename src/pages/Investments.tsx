@@ -4,13 +4,15 @@ import { PriceUpdateForm } from '@/components/priceHistory/PriceUpdateForm';
 import { usePortfolio } from '@/context/PortfolioContext';
 import { formatRM } from '@/lib/currency';
 import { groupPriceHistoryByAsset, resolveDisplayCurrent } from '@/lib/priceHistoryMath';
-import { fetchAllPriceHistory } from '@/lib/priceHistoryService';
+import { fetchAllPriceHistory, seedDemoHistoryIfEmpty } from '@/lib/priceHistoryService';
+import { usePageTitle } from '@/lib/usePageTitle';
 import type { PriceHistoryRow } from '@/types';
 import type { Investment, RiskLevel } from '@/types';
 
 type Tab = 'all' | RiskLevel;
 
 export function Investments() {
+  usePageTitle('Investments');
   const { investments, updateInvestment } = usePortfolio();
   const [tab, setTab] = useState<Tab>('all');
   const [editing, setEditing] = useState<Investment | null>(null);
@@ -20,10 +22,16 @@ export function Investments() {
 
   const loadPh = useCallback(async () => {
     setPhLoading(true);
-    const rows = await fetchAllPriceHistory();
+    let rows = await fetchAllPriceHistory();
+    if (rows.length === 0) {
+      const seeded = await seedDemoHistoryIfEmpty(investments);
+      if (seeded) {
+        rows = await fetchAllPriceHistory();
+      }
+    }
     setPriceRows(rows);
     setPhLoading(false);
-  }, []);
+  }, [investments]);
 
   useEffect(() => {
     loadPh();
@@ -64,7 +72,6 @@ export function Investments() {
 
   function openEdit(inv: Investment) {
     setEditing(inv);
-    const s = byName.get(inv.name);
     const eff = resolveDisplayCurrent(inv.current, byName.get(inv.name));
     setDraftCurrent(String(eff));
   }

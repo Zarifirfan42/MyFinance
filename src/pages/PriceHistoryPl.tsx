@@ -9,9 +9,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { PriceChartEmpty } from '@/components/PriceChartEmpty';
 import { usePortfolio } from '@/context/PortfolioContext';
 import { formatDisplayDate, todayISODateLocal } from '@/lib/dateDisplay';
 import { formatRMUnsigned } from '@/lib/currency';
+import { downloadTextFile, exportPriceHistoryCsv } from '@/lib/exportActivitiesCsv';
 import {
   buildPlLogEntries,
   chartRangeStart,
@@ -24,6 +26,7 @@ import {
 } from '@/lib/priceHistoryMath';
 import { formatPlPct, formatPlRm, plCardStyle, plRmStyle } from '@/lib/plFormat';
 import { fetchAllPriceHistory } from '@/lib/priceHistoryService';
+import { usePageTitle } from '@/lib/usePageTitle';
 import { isSupabaseConfigured } from '@/lib/supabase.js';
 import type { PriceHistoryRow } from '@/types';
 
@@ -38,9 +41,11 @@ const TABLE_FILTERS: { id: TableFilter; label: string }[] = [
 const RANGE_PRESETS = ['1W', '1M', '3M', '6M', '1Y', 'ALL'] as const;
 
 export function PriceHistoryPl() {
+  usePageTitle('P&L');
   const { investments } = usePortfolio();
   const [rows, setRows] = useState<PriceHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [tableFilter, setTableFilter] = useState<TableFilter>('all');
   const [chartAsset, setChartAsset] = useState('');
   const [chartRange, setChartRange] = useState<(typeof RANGE_PRESETS)[number]>('3M');
@@ -52,10 +57,13 @@ export function PriceHistoryPl() {
     const data = await fetchAllPriceHistory();
     setRows(data);
     setLoading(false);
+    setLastUpdated(new Date());
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
+    const id = window.setInterval(() => void load(), 60_000);
+    return () => window.clearInterval(id);
   }, [load]);
 
   const assetNames = useMemo(() => {
@@ -96,6 +104,20 @@ export function PriceHistoryPl() {
       label: formatDisplayDate(p.date),
     }));
   }, [byAsset, chartAsset, chartFrom, today]);
+
+  const lastUpdatedStr = lastUpdated
+    ? lastUpdated.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      })
+    : null;
+
+  function handleExportCsv() {
+    const csv = exportPriceHistoryCsv(filteredTable);
+    downloadTextFile(`myfinance-pnl-${tableFilter}-${today}.csv`, csv);
+  }
 
   return (
     <div className="space-y-8">
@@ -139,7 +161,18 @@ export function PriceHistoryPl() {
       )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Price chart</p>
+            {lastUpdatedStr ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Last updated: {lastUpdatedStr}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <label className="block text-sm font-medium">
             Asset
             <select
@@ -174,9 +207,7 @@ export function PriceHistoryPl() {
 
         <div className="mt-6 h-80 w-full">
           {chartPoints.length === 0 ? (
-            <p className="py-16 text-center text-sm text-slate-500">
-              No price data yet — add your first entry on Investments.
-            </p>
+            <PriceChartEmpty />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartPoints} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
@@ -203,9 +234,7 @@ export function PriceHistoryPl() {
                     return (
                       <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow dark:border-slate-700 dark:bg-slate-900">
                         <div className="text-xs text-slate-500">{formatDisplayDate(p.date)}</div>
-                        <div className="font-semibold">
-                          {formatRMUnsigned(p.value_rm)}
-                        </div>
+                        <div className="font-semibold">{formatRMUnsigned(p.value_rm)}</div>
                         {vsCost != null ? (
                           <div style={{ color: vsCost >= 0 ? '#3B6D11' : '#A32D2D' }}>
                             vs cost: {formatPlPct(vsCost)}
@@ -258,6 +287,17 @@ export function PriceHistoryPl() {
           ))}
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={filteredTable.length === 0 || loading}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            Export CSV
+          </button>
+        </div>
+
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <table className="min-w-[720px] w-full text-sm">
             <thead>
@@ -272,11 +312,15 @@ export function PriceHistoryPl() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
-                    Loading…
-                  </td>
-                </tr>
+                [...Array(5)].map((_, i) => (
+                  <tr key={`sk-${i}`} className="border-b border-slate-100 dark:border-slate-800">
+                    {Array.from({ length: 6 }).map((__, j) => (
+                      <td key={j} className="px-4 py-3">
+                        <div className="h-4 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                      </td>
+                    ))}
+                  </tr>
+                ))
               ) : filteredTable.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-slate-500">

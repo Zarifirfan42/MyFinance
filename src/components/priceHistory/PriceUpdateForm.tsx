@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useToast } from '@/components/Toast';
 import { todayISODateLocal } from '@/lib/dateDisplay';
 import { upsertPriceEntry } from '@/lib/priceHistoryService';
 import { isSupabaseConfigured } from '@/lib/supabase.js';
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function PriceUpdateForm({ investments, onSaved }: Props) {
+  const { showToast } = useToast();
   const [assetName, setAssetName] = useState('');
   const [date, setDate] = useState(todayISODateLocal());
   const [valueRm, setValueRm] = useState('');
@@ -32,6 +34,9 @@ export function PriceUpdateForm({ investments, onSaved }: Props) {
     if (row) {
       onSaved(assetName, v);
       setValueRm('');
+      showToast(`Price updated for ${assetName}`, 'success');
+    } else if (isSupabaseConfigured) {
+      showToast('Could not save price — check Supabase console or network', 'error');
     }
   }
 

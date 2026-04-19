@@ -31,10 +31,14 @@ export async function fetchActivities(): Promise<ActivityRow[]> {
   return (data ?? []).map((r) => mapRow(r as Record<string, unknown>));
 }
 
+export type InsertActivityResult =
+  | { ok: true; row: ActivityRow }
+  | { ok: false; message: string };
+
 export async function insertActivity(
   row: Omit<ActivityRow, 'id' | 'created_at'>,
-): Promise<ActivityRow | null> {
-  if (!supabase) return null;
+): Promise<InsertActivityResult> {
+  if (!supabase) return { ok: false, message: 'Supabase is not configured' };
 
   const { data, error } = await supabase
     .from('activities')
@@ -50,8 +54,8 @@ export async function insertActivity(
 
   if (error) {
     console.error('activities insert:', error.message);
-    return null;
+    return { ok: false, message: error.message };
   }
 
-  return mapRow(data as Record<string, unknown>);
+  return { ok: true, row: mapRow(data as Record<string, unknown>) };
 }

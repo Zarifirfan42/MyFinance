@@ -1,8 +1,10 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useToast } from '@/components/Toast';
 import { usePortfolio } from '@/context/PortfolioContext';
 import { fetchActivities, insertActivity } from '@/lib/activitiesService';
 import { formatRM } from '@/lib/currency';
 import { activitiesToCsv, downloadTextFile } from '@/lib/exportActivitiesCsv';
+import { usePageTitle } from '@/lib/usePageTitle';
 import { isSupabaseConfigured } from '@/lib/supabase.js';
 import type { ActivityRow, ActivityType } from '@/types';
 
@@ -40,6 +42,8 @@ function inFilter(row: ActivityRow, f: Filter): boolean {
 }
 
 export function ActivityLog() {
+  usePageTitle('Activity');
+  const { showToast } = useToast();
   const { banks, investments } = usePortfolio();
   const [activities, setActivities] = useState<ActivityRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +98,7 @@ export function ActivityLog() {
     const amt = parseFloat(form.amount);
     if (Number.isNaN(amt) || !form.description.trim() || !form.account) return;
 
-    const created = await insertActivity({
+    const result = await insertActivity({
       date: form.date,
       description: form.description.trim(),
       amount: amt,
@@ -102,14 +106,17 @@ export function ActivityLog() {
       account: form.account,
     });
 
-    if (created) {
-      setActivities((prev) => [created, ...prev]);
+    if (result.ok) {
+      setActivities((prev) => [result.row, ...prev]);
       setForm((f) => ({
         ...f,
         description: '',
         amount: '',
         date: new Date().toISOString().slice(0, 10),
       }));
+      showToast('Activity logged', 'success');
+    } else if (isSupabaseConfigured) {
+      showToast(result.message, 'error');
     }
   }
 
@@ -261,11 +268,25 @@ export function ActivityLog() {
             </thead>
             <tbody>
               {loading ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                    Loading…
-                  </td>
-                </tr>
+                [...Array(5)].map((_, i) => (
+                  <tr key={`sk-${i}`} className="border-b border-slate-100 dark:border-slate-800">
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-24 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-full max-w-xs animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="ml-auto h-4 w-20 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-5 w-16 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="h-4 w-28 animate-pulse rounded bg-slate-200 dark:bg-slate-700" />
+                    </td>
+                  </tr>
+                ))
               ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-slate-500">

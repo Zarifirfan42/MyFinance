@@ -38,6 +38,16 @@ export function InvestmentMHCard({ inv, series, loading, onEdit }: Props) {
     cost != null && cost !== 0 ? ((effective - cost) / cost) * 100 : null;
   const todayPct = todayVsYesterdayPct(series, todayStr);
   const lineColor = cost != null && effective >= cost ? PL_POS.text : PL_NEG.text;
+  const hasCost = cost != null && cost > 0;
+  const costBarFill =
+    hasCost && effective >= (cost as number) ? '#639922' : hasCost ? '#E24B4A' : '#94a3b8';
+  const costBarWidthPct = hasCost
+    ? (Math.min((effective / (cost as number)) * 100, 150) / 150) * 100
+    : 0;
+  const costLabelPct =
+    hasCost && (cost as number) !== 0
+      ? ((effective - (cost as number)) / (cost as number)) * 100
+      : null;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -104,6 +114,28 @@ export function InvestmentMHCard({ inv, series, loading, onEdit }: Props) {
               </p>
             </div>
           </div>
+
+          {hasCost ? (
+            <div className="mt-4 space-y-1.5">
+              <div className="h-[6px] w-full overflow-hidden rounded-[3px] bg-slate-200 dark:bg-slate-700">
+                <div
+                  className="h-full rounded-[3px] transition-[width]"
+                  style={{
+                    width: `${costBarWidthPct}%`,
+                    backgroundColor: costBarFill,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                {formatRM(effective)} / {formatRM(cost as number)}
+                {costLabelPct != null ? (
+                  <span className="ml-1 font-medium" style={{ color: costBarFill }}>
+                    ({formatPlPct(costLabelPct)})
+                  </span>
+                ) : null}
+              </p>
+            </div>
+          ) : null}
 
           <div className="mt-4 h-28 w-full">
             {spark.length === 0 ? (
